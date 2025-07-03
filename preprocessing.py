@@ -5,11 +5,9 @@ import seaborn as sns
 from sklearn.impute import KNNImputer
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-import os
-from google.colab import drive
-drive.mount('/content/drive')
 
-df = pd.read_csv('/content/drive/My Drive/Ashrae_Buildings.csv')
+df = pd.read_csv('Ashrae_Buildings.csv')
+#df = pd.read_csv('Scales_Dataset.csv')
 
 # Check the missing values
 missing_values = df.isnull().sum()
