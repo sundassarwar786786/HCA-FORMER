@@ -1,6 +1,7 @@
 # HCA-Former: A Context-Aware Transformer for Adaptive Thermal Comfort Prediction
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+## This is a Tensorflow implementation of the following paper:
+Sundas Sarwar, Jerry Chun-Wei Lin, Lars Arne Jordanger, Daniela Annunziata, Francesco Piccialli
 
 ## 🔍 Overview
 
