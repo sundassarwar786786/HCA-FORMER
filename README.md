@@ -1,6 +1,6 @@
 # HCA-Former: A Context-Aware Transformer for Adaptive Thermal Comfort Prediction
 
-## This is a Tensorflow implementation of the following paper:
+## This is a pytorch implementation of the following paper:
 Sundas Sarwar, Jerry Chun-Wei Lin, Lars Arne Jordanger, Daniela Annunziata, Francesco Piccialli
 
 ## 🔍 Overview
