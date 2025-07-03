@@ -1,7 +1,3 @@
-import os
-from google.colab import drive
-drive.mount('/content/drive')
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as pltimport torch
@@ -15,7 +11,7 @@ from imblearn.over_sampling import SMOTE
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, cohen_kappa_score, matthews_corrcoef, confusion_matrix
 from sklearn.model_selection import StratifiedKFold
 
-df = pd.read_csv('/content/drive/My Drive/Ashrae_Buildings.csv')
+df = pd.read_csv('Ashrae_Buildings.csv')
 
 # ✅ Load dataset (assuming df is already loaded)
 hier_cols = ["Building type", "City", "Season", "Koppen climate classification", "Country"]
