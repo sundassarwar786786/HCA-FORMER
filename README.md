@@ -24,6 +24,15 @@ Traditional models like PMV and adaptive comfort models often assume static envi
 - 🌐 Suitable for real-time HVAC adaptation and smart building systems.
 
 ---
+## Requirements
+
+python>=3.6
+pytorch>=0.4
+
+## Note
+Follow the tutorial here to download the ASHRAE Global Thermal Comfort Database II and Scales Project, place the files into the "dataset" zip folder.
+
+
 
 
 
