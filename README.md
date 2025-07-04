@@ -3,7 +3,6 @@
 This is the official **PyTorch implementation** of the paper:
 
 > **Sundas Sarwar, Jerry Chun-Wei Lin, Lars Arne Jordanger, Daniela Annunziata, Francesco Piccialli**  
-> _HCA-Former: A Context-Aware Transformer for Adaptive Thermal Comfort Prediction_
 
 ---
 
@@ -18,7 +17,6 @@ We present **HCA-Former**, a transformer-based framework that introduces **Hiera
 - ✅ **Multiclass prediction** of thermal comfort levels.
 - 🧠 **Context-aware deep learning** with transformer architecture.
 - 🏢 **Scalable** across building types, climates, and seasons.
-- 📊 Achieves **0.802 accuracy** and **0.795 F1-score** on real-world data.
 - 🌀 Robust performance verified via ROC and confusion matrix analysis.
 - 🌐 Ideal for **smart HVAC systems** and real-time thermal comfort control.
 
