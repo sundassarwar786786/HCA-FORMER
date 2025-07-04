@@ -54,7 +54,7 @@ This project consists of two primary steps: **data preprocessing** and **model t
 
 Use `preprocessing.py` to clean and prepare the dataset for training.
 
-python preprocessing.py --input ./data/raw.csv --output ./data/processed.csv
+python preprocessing.py --input ./data/ashrae_db2.01.csv --output ./data/processed.csv
 
 ### Step 2: Train and Evaluate the Model (10-Fold Cross-Validation)
 
