@@ -27,7 +27,6 @@ We present **HCA-Former**, a transformer-based framework that introduces **Hiera
 
 Install dependencies using **Conda**.
 
-### Using Conda
 
 # 1. Create and activate a conda environment
 conda create -n hcaformer_env python=3.8 -y
@@ -48,17 +47,15 @@ Before running the project, ensure have the following dependencies installed:
 - CUDA Toolkit (for GPU support): **cudatoolkit=11.3**
 
 
-``` Execution Steps
+## Execution Steps
 
 This project consists of two primary steps: **data preprocessing** and **model training with cross-validation**.
 
----
 
 ### Step 1: Preprocess the Data
 
 Use `preprocessing.py` to clean and prepare the dataset for training.
 
-```bash
 python preprocessing.py --input ./data/raw.csv --output ./data/processed.csv
 
 ### Step 2: Train and Evaluate the Model (10-Fold Cross-Validation)
