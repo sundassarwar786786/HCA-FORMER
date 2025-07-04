@@ -68,7 +68,18 @@ python hca-former.py --data ./data/processed.csv --folds 10 --epochs 100
 
 
 ## Note
-Follow the tutorial here to download the ASHRAE Global Thermal Comfort Database II and Scales Project, place the files into the "dataset" zip folder.
+
+
+This project requires the following datasets:
+
+1. **ASHRAE Global Thermal Comfort Database II**
+2. **Scales Project Dataset**
+
+**Instructions**:
+
+- Both datasets are provided in a zip archive.
+- Unzip the archive and **place the extracted contents into the** `./data/dataset/` **folder**.
+  
 
 
 
