@@ -13,7 +13,7 @@ Ensuring occupant well-being, improving energy efficiency, and optimizing indoor
 
 We present **HCA-Former**, a transformer-based framework that introduces **Hierarchical Context Attention (HCA)** and **Multi-Head Self-Attention (MHSA)** to dynamically model dependencies across contextual layers. The proposed model eliminates redundancy and enhances generalization by capturing intricate interrelationships among thermal comfort features.
 
-### 🔬 Key Contributions
+###  Key Contributions
 
 - ✅ **Multiclass prediction** of thermal comfort levels.
 - 🧠 **Context-aware deep learning** with transformer architecture.
