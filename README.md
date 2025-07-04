@@ -42,8 +42,6 @@ Before running the project, ensure have the following dependencies installed:
 
 - Python >= **3.6**
 - PyTorch >= **0.4**
-- TorchVision
-- TorchAudio
 - CUDA Toolkit (for GPU support): **cudatoolkit=11.3**
 
 
