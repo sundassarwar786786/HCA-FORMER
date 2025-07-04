@@ -29,7 +29,6 @@ Install dependencies using **Conda**.
 
 ### Using Conda
 
-bash
 # 1. Create and activate a conda environment
 conda create -n hcaformer_env python=3.8 -y
 conda activate hcaformer_env
