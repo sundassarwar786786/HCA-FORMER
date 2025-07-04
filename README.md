@@ -26,7 +26,7 @@ We present **HCA-Former**, a transformer-based framework that introduces **Hiera
 
 ## 🛠️ Setup & Installation
 
-Install dependencies using either **Conda**.
+Install dependencies using **Conda**.
 
 ### Using Conda
 
@@ -39,7 +39,6 @@ conda activate hcaformer_env
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 
 
----
 ## Requirements
 
 python>=3.6
