@@ -23,19 +23,17 @@ We present **HCA-Former**, a transformer-based framework that introduces **Hiera
 
 ---
 
-## Setup & Installation
+## Requirements
 
-Install dependencies using **Conda**.
+Before running the project, ensure have the following dependencies installed:
 
-### Using Conda
+- Python >= **3.6**
+- PyTorch >= **0.4**
+- TorchVision
+- TorchAudio
+- CUDA Toolkit (for GPU support): **cudatoolkit=11.3**
 
-```bash
-# 1. Create and activate a conda environment
-conda create -n hcaformer_env python=3.8 -y
-conda activate hcaformer_env
 
-# 2. Install PyTorch
-conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 
 ```Requirements
 
@@ -45,9 +43,10 @@ To run this project, need the following dependencies:
 - `pytorch >= 0.4`
 
 
+
 ---
 
-## Execution Steps
+``` Execution Steps
 
 This project consists of two primary steps: **data preprocessing** and **model training with cross-validation**.
 
