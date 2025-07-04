@@ -62,7 +62,6 @@ python preprocessing.py --input ./data/raw.csv --output ./data/processed.csv
 
 Run `hca-former.py` to train and evaluate the model using k-fold cross-validation.
 
-```bash
 python hca-former.py --data ./data/processed.csv --folds 10 --epochs 100
 
 
