@@ -22,6 +22,8 @@ We present **HCA-Former**, a transformer-based framework that introduces **Hiera
 
 ---
 
+---
+
 ## Setup & Installation
 
 Install dependencies using **Conda**.
@@ -33,23 +35,39 @@ Install dependencies using **Conda**.
 conda create -n hcaformer_env python=3.8 -y
 conda activate hcaformer_env
 
-# 2. Install PyTorch.
+# 2. Install PyTorch
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 
+``` Requirements
+
+To run this project, need the following dependencies:
+
+
+- `python >= 3.6`
+- `pytorch >= 0.4`
+
+## Execution Steps
+
+This project consists of two primary steps: **data preprocessing** and **model training with cross-validation**.
+
 ---
 
-## Requirements
+### Step 1: Preprocess the Data
 
-python>=3.6
-pytorch>=0.4
----
+Use `preprocessing.py` to clean and prepare the dataset for training.
 
-## Execuation Steps
-### Step 1: Preprocess data
+```bash
 python preprocessing.py --input ./data/raw.csv --output ./data/processed.csv
 
-### Step 2: Train and evaluate the model with 5-fold CV
-python hca-former.py --data ./data/processed.csv --folds 5 --epochs 50
+### Step 2: Train and Evaluate the Model (10-Fold Cross-Validation)
+
+Run `hca-former.py` to train and evaluate the model using k-fold cross-validation.
+
+```bash
+python hca-former.py --data ./data/processed.csv --folds 10 --epochs 100
+
+
+
 
 ## Note
 Follow the tutorial here to download the ASHRAE Global Thermal Comfort Database II and Scales Project, place the files into the "dataset" zip folder.
