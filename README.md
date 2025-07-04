@@ -6,7 +6,7 @@ This is the official **PyTorch implementation** of the paper:
 
 ---
 
-## 🔍 Abstract
+## Abstract
 
 Ensuring occupant well-being, improving energy efficiency, and optimizing indoor environments based on accurate thermal comfort predictions constitute key objectives in smart buildings. However, traditional models such as the Predicted Mean Value (PMV) and adaptive approaches often rely on static assumptions and fail to capture the complex interplay between environmental conditions, occupant preferences, and contextual factors such as climate, season, and building characteristics.
 
@@ -43,11 +43,12 @@ conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 python>=3.6
 pytorch>=0.4
 ---
+
 ## Execuation Steps
-## Step 1: Preprocess data
+### Step 1: Preprocess data
 python preprocessing.py --input ./data/raw.csv --output ./data/processed.csv
 
-## Step 2: Train and evaluate the model with 5-fold CV
+### Step 2: Train and evaluate the model with 5-fold CV
 python hca-former.py --data ./data/processed.csv --folds 5 --epochs 50
 
 ## Note
