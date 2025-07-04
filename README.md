@@ -14,11 +14,11 @@ We present **HCA-Former**, a transformer-based framework that introduces **Hiera
 
 ###  Key Contributions
 
-- ✅ **Multiclass prediction** of thermal comfort levels.
-- 🧠 **Context-aware deep learning** with transformer architecture.
-- 🏢 **Scalable** across building types, climates, and seasons.
-- 🌀 Robust performance verified via ROC and confusion matrix analysis.
-- 🌐 Ideal for **smart HVAC systems** and real-time thermal comfort control.
+- **Multiclass prediction** of thermal comfort levels.
+- **Context-aware deep learning** with transformer architecture.
+-  **Scalable** across building types, climates, and seasons.
+-  Robust performance verified via ROC and confusion matrix analysis.
+-  Ideal for **smart HVAC systems** and real-time thermal comfort control.
 
 
 ---
