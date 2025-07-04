@@ -56,7 +56,7 @@ Use `preprocessing.py` to clean and prepare the dataset for training.
 
 python preprocessing.py --input ./data/ashrae_db2.01.csv --output ./data/processed.csv
 
-### Step 2: Train and Evaluate the Model (10-Fold Cross-Validation)
+### Step 2: Train and Evaluate the Model
 
 Run `hca-former.py` to train and evaluate the model using k-fold cross-validation.
 
