@@ -20,7 +20,6 @@ We present **HCA-Former**, a transformer-based framework that introduces **Hiera
 - 🌀 Robust performance verified via ROC and confusion matrix analysis.
 - 🌐 Ideal for **smart HVAC systems** and real-time thermal comfort control.
 
----
 
 ---
 
@@ -45,6 +44,9 @@ To run this project, need the following dependencies:
 
 - `python >= 3.6`
 - `pytorch >= 0.4`
+
+
+---
 
 ## Execution Steps
 
