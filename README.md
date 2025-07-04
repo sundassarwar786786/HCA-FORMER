@@ -37,10 +37,9 @@ conda activate hcaformer_env
 # 2. Install PyTorch
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 
-``` Requirements
+```Requirements
 
 To run this project, need the following dependencies:
-
 
 - `python >= 3.6`
 - `pytorch >= 0.4`
