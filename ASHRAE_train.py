@@ -25,7 +25,7 @@ from sklearn.metrics import (
     matthews_corrcoef,
 )
 
-# 1. HYPERPARAMTERS SETTINGS
+# 1. HYPERPARAMTERS
 
 parser = argparse.ArgumentParser(description="HCA-Former on the ASHRAE dataset")
 parser.add_argument("--preprocessed_dir", type=str, default=".",
