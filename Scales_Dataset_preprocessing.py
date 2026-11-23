@@ -151,7 +151,7 @@ print("\nRows:", len(df), "| participants:", len(set(groups)),
       "| numerical features:", len(numerical_features_all),
       "| categorical features:", len(categorical_features))
 
-# SPLIT + STAGE 2
+# SPLIT
 
 for run, seed in enumerate(SPLIT_SEEDS, start=1):
     print(f"\n========== Split {run} (seed {seed}) ==========")
@@ -173,7 +173,7 @@ for run, seed in enumerate(SPLIT_SEEDS, start=1):
     y_train, y_val, y_test = y[train_idx], y[val_idx], y[test_idx]
     print("Train:", train.shape, " Validation:", val.shape, " Test:", test.shape)
 
-    # ---------------- 7. missing values
+    # missing values
     # categorical: most frequent value of the training set
     for col in categorical_features:
         if train[col].notna().any():
@@ -196,20 +196,19 @@ for run, seed in enumerate(SPLIT_SEEDS, start=1):
     for part in (train, val, test):
         part[numerical_features] = imputer.transform(part[numerical_features].to_numpy())
 
-    # ---------------- 8. standardization, fitted on the training set
+    # standardization
     scaler = StandardScaler()
     scaler.fit(train[numerical_features].to_numpy())
     for part in (train, val, test):
         part[numerical_features] = scaler.transform(part[numerical_features].to_numpy())
 
-    # ---------------- 9. DBSCAN outlier removal (training set only)
+    # DBSCAN outlier removal
     if APPLY_DBSCAN:
         dbscan = DBSCAN(eps=DBSCAN_EPS, min_samples=DBSCAN_MIN_SAMPLES, n_jobs=-1)
         keep = dbscan.fit_predict(train[numerical_features].to_numpy()) != -1
         print(f"DBSCAN (eps = {DBSCAN_EPS}, min_samples = {DBSCAN_MIN_SAMPLES}) outliers removed:",
               int((~keep).sum()), f"of {len(train)} training rows ({100 * (~keep).mean():.2f} %)")
 
-        # inspection: how the removed rows differ from the kept rows (raw, unscaled values)
         if (~keep).any() and keep.any():
             inspect = pd.DataFrame({
                 "median_removed": raw_train[~keep].median(),
@@ -226,24 +225,19 @@ for run, seed in enumerate(SPLIT_SEEDS, start=1):
 
         train, y_train = train[keep], y_train[keep]
 
-    # ---------------- 10. encode categorical features (training-set vocabulary)
-    # a category that appears only in validation/test gets its own "Unknown" code
+    # encode categorical features
     for col in categorical_features:
         categories = sorted(train[col].astype(str).unique())
         codes = {value: i for i, value in enumerate(categories)}
         for part in (train, val, test):
             part[col] = part[col].astype(str).map(codes).fillna(len(categories)).astype(int)
 
-    # ---------------- 11. SMOTE on the training set only
-    # only classes -2 (index 0) and +2 (index 4) are oversampled, up to the size
-    # of the smallest mid-range class (-1, 0, +1)
+    # SMOTE on the training set only
     counts = pd.Series(y_train).value_counts().sort_index()
     target_count = int(min(counts[1], counts[2], counts[3]))
     sampling_strategy = {cls: max(target_count, int(counts[cls])) for cls in (0, 4)}
 
-    k = min(5, int(counts[0]) - 1, int(counts[4]) - 1)    # SMOTE needs k < size of the class
-    # plain SMOTE interpolates every column, so the synthetic rows get non-integer
-    # category codes; these are rounded back to the nearest valid code
+    k = min(5, int(counts[0]) - 1, int(counts[4]) - 1)    
     smote = SMOTE(sampling_strategy=sampling_strategy, k_neighbors=k, random_state=seed)
     train_bal, y_train_bal = smote.fit_resample(train, y_train)
     for col in categorical_features:
