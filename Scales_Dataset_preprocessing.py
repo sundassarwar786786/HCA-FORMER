@@ -3,272 +3,273 @@
 """
 Created on Lun Lug 07 14:53:11 2025
 
-@author: modal
+@author: Sundas Sarwar
 """
 
 # %%
-import argparse
+
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from pathlib import Path
-import matplotlib.pyplot as plt
-from datetime import date, time
-from imblearn.over_sampling import SMOTE
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.impute import KNNImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import DBSCAN
+from imblearn.over_sampling import SMOTE
 
-# %%
+DATA_PATH = "./dataset/Scales_Dataset.csv"     
 
-parser = argparse.ArgumentParser(
-    description="Preprocessing for Hierarchical Transformer with Multi-Head Self-Attention for Sensor Data"
-)
-parser.add_argument(
-    "--data_path", type=str, default="./data", help="Path to the dataset CSV file"
-)
-parser.add_argument(
-    "--output_path",
-    type=str,
-    default="./preprocessed_data",
-    help="Path to save the processed dataset",
-)
-args, _ = parser.parse_known_args()
+# "fixed"  = ONE fixed 70/10/20 partition (seed 42), as in the paper: the five runs then use the
+#            same partition with a different training seed.
+# "random" = five different random 70/10/20 partitions (seeds 42, 1, 2, 3, 4).
+SPLIT_MODE = "fixed"
+SPLIT_SEEDS = [42] if SPLIT_MODE == "fixed" else [42, 1, 2, 3, 4]
 
-file_path = Path(args.data_path).resolve() / "Scales_Dataset.csv"
-output_path = Path(args.output_path).resolve()
-output_path.mkdir(parents=True, exist_ok=True)
-output_file = output_path / "Scales_Dataset_processed.csv"
+PARTICIPANT_ID = "unID"      # subject-wise split: no participant in more than one subset
 
-# %%
+# DBSCAN setting
+APPLY_DBSCAN = True          
+DBSCAN_EPS = 5
+DBSCAN_MIN_SAMPLES = 3
 
-df = pd.read_csv(file_path, encoding="ISO-8859-1")
+ROLLING_WINDOW = 3           # observations in the rolling median / running average
 
-# %%
-# Check the missing values
-missing_values = df.isnull().sum()
-missing_percentage = (missing_values / len(df)) * 100
+# LOAD DATASET
 
-# Identify columns with >50% missing
-columns_above_50_missing = missing_percentage[missing_percentage > 50].sort_values(
-    ascending=False
-)
+df = pd.read_csv(DATA_PATH, encoding="ISO-8859-1", low_memory=False)
+print("Original shape:", df.shape)
 
-# Drop these columns from the dataframe
-df.drop(columns=columns_above_50_missing.index, axis=1, inplace=True)
+# Five contextual features used by HCA (same as the official code).
+contextual_features = ["SurvCity", "SurvCountry", "Season", "SeasonDesc", "SensType"]
 
-# %%
+# DROP DUPLICATE ROWS AND MOSTLY-EMPTY COLUMNS
 
-plt.figure(figsize=(10, 6))
-sns.heatmap(df.isnull(), cmap="viridis", cbar=False, yticklabels=False)
-plt.title("Missing Values Heatmap")
-plt.show()
+n_before = len(df)
+df = df.drop_duplicates()
+print("Duplicate rows removed:", n_before - len(df))
 
+missing_share = df.isna().mean()
+mostly_empty = [c for c in missing_share[missing_share > 0.5].index if c not in contextual_features]
+df = df.drop(columns=mostly_empty)
+print("Columns with > 50 % missing values removed:", len(mostly_empty))
 
-# %%
-# Display the data types of all columns
-print(df.dtypes)
+# THERMAL SENSATION: 7 POINTS -> 5 POINTS
 
-# %%
-# Identify potential date/time columns based on column names
-date_time_cols = [
-    col for col in df.columns if "date" in col.lower() or "time" in col.lower()
-]
+# StateTSVF is coded 1..7  ->  -3..+3  ->  5 points:
+# -3, -2 -> -2 ;  -1 -> -1 ;  0 -> 0 ;  +1 -> +1 ;  +2, +3 -> +2
+# Rows without a vote are removed.
 
-# Convert date columns to date only, and time columns to time only
-conversion_results = {}
-for col in date_time_cols:
-    try:
-        df[col] = pd.to_datetime(
-            df[col], errors="coerce"
-        )  # First convert to full datetime
-        if "date" in col.lower():
-            df[col] = df[col].dt.date  # Keep only date part
-            conversion_results[col] = "Converted to date format"
-        elif "time" in col.lower():
-            df[col] = df[col].dt.time  # Keep only time part
-            conversion_results[col] = "Converted to time format"
-    except Exception as e:
-        conversion_results[col] = f"Failed to convert: {str(e)}"
+TARGET = "StateTSVF"
 
-# %%
+df = df.dropna(subset=[TARGET]).copy()
+tsv_5 = np.clip(np.round(df[TARGET] - 4), -2, 2)
+df["label"] = (tsv_5 + 2).astype(int)          # class index 0..4  <->  -2..+2
+df = df.drop(columns=[TARGET])
 
-# Re-identify column types
-numerical_columns = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
-categorical_columns = df.select_dtypes(include=["object"]).columns.tolist()
+print("\nFive-point distribution (0..4 = -2..+2):")
+print(df["label"].value_counts().sort_index().tolist())
 
-# Correctly identify date and time columns
-date_columns = [
-    col for col in df.columns if df[col].apply(lambda x: isinstance(x, date)).any()
-]
-time_columns = [
-    col for col in df.columns if df[col].apply(lambda x: isinstance(x, time)).any()
-]
+# RULE-BASED PHYSICAL VALIDATION
 
-# Remove identified date/time columns from categorical list if present
-categorical_columns = [
-    col for col in categorical_columns if col not in date_columns + time_columns
-]
-
-# Display the results
-column_types_summary = {
-    "Numerical Columns": numerical_columns,
-    "Categorical Columns": categorical_columns,
-    "Date Columns": date_columns,
-    "Time Columns": time_columns,
+# Implausible readings are set to missing (the row is kept and the
+# value is filled later by KNN imputation).
+physical_limits = {
+    "TinAirSurv": (5, 45), "TinGlobeSurv": (5, 50), "TinRadSurv": (5, 50), "TinOpSurv": (5, 45),
+    "Tin": (5, 45), "RHinSurv": (0, 100), "AvinSurv": (0, 5),
+    "ToutSurv": (-40, 50), "ToutDay": (-40, 50), "ToutWeek": (-40, 50),
+    "RHoutSurv": (0, 100), "RHoutDay": (0, 100), "RHoutWeek": (0, 100),
 }
 
+invalid_counts = {}
+for col, (lower, upper) in physical_limits.items():
+    if col in df.columns:
+        invalid = df[col].notna() & ~df[col].between(lower, upper)
+        if invalid.any():
+            invalid_counts[col] = int(invalid.sum())
+            df.loc[invalid, col] = np.nan
 
-# %%
+print("\nImplausible values set to missing:", invalid_counts)
 
-# Step 1: Drop rows with missing target values
-df = df.dropna(subset=["StateTSVF"])
+# TEMPORAL CONTEXT FEATURES
 
-# Step 2: Encode original 1–7 values to labels 0–6
-le = LabelEncoder()
-df["StateTSVF"] = le.fit_transform(df["StateTSVF"])  # Now 0 to 6
+timestamp = pd.to_datetime(df["Date"].astype(str) + " " + df["Time"].astype(str),
+                           format="%m/%d/%Y %H:%M", errors="coerce")
+df["hour_of_day"] = timestamp.dt.hour
+df["month"] = timestamp.dt.month
+df["weekday"] = timestamp.dt.weekday
 
-# Step 3: Map from label 0–6 to -3 to +3
-initial_map = {0: -3, 1: -2, 2: -1, 3: 0, 4: 1, 5: 2, 6: 3}
-df["StateTSVF"] = df["StateTSVF"].map(initial_map)
+# ROLLING-MEDIAN SMOOTHING + RUNNING AVERAGES
 
-# ✅ Step 4: Map from -3 to +3 into 5-point scale (0 to 4)
-five_point_map = {-3: 0, -2: 1, -1: 1, 0: 2, 1: 3, 2: 3, 3: 4}
-df["StateTSVF"] = df["StateTSVF"].map(five_point_map)
+df["_time"] = timestamp
+df = df.sort_values(["SurvCity", "_time"], kind="mergesort")
+by_city = df.groupby("SurvCity", sort=False)
 
-# Step 5: Prepare numeric data
-X = df.select_dtypes(include=["int64", "float64"]).fillna(df.mean(numeric_only=True))
-y = df["StateTSVF"]
+smoothed = [c for c in ["Tin", "TinAirSurv", "RHinSurv", "ToutSurv", "RHoutSurv"] if c in df.columns]
+for col in smoothed:
+    df[col] = by_city[col].transform(lambda s: s.rolling(ROLLING_WINDOW, min_periods=1).median())
 
-# Step 6: Apply SMOTE
-smote = SMOTE(random_state=42)
-X_resampled, y_resampled = smote.fit_resample(X, y)
+for col in [c for c in ["Tin", "RHinSurv"] if c in df.columns]:
+    df[col + "_running_avg"] = by_city[col].transform(
+        lambda s: s.rolling(ROLLING_WINDOW, min_periods=1).mean())
 
-# Step 7: Check class distribution
-print("Original distribution:\n", y.value_counts().sort_index())
-print("Resampled distribution:\n", pd.Series(y_resampled).value_counts().sort_index())
+print("Smoothed columns:", smoothed)
 
+# ZONE-LEVEL DESCRIPTORS (MEAN, VARIANCE, MIN-MAX RANGE)
 
-# %%
-data1 = df[df["StatusHVACcat"] == "Air conditioned"]
-data2 = df[df["StatusHVACcat"] == "Natural Ventilation"]
-data3 = df[df["StatusHVACcat"] == "Mixed ventilation"]
-data4 = df[df["StatusHVACcat"] == "Mech ventilation"]
-data5 = df[df["StatusHVACcat"] == "No HVAC"]
-data6 = df[df["StatusHVACcat"] == "Heated"]
-data7 = df[df["StatusHVACcat"] == "unknown"]
-data8 = df[df["StatusHVACcat"].isna()]
-df = pd.concat([data1, data2, data3, data4, data5, data6, data7, data8], axis=0)
+zone_cols = [c for c in ["TinAirSurv", "TinGlobeSurv", "TinRadSurv", "TinOpSurv"] if c in df.columns]
+if len(zone_cols) >= 2:
+    df["Tin_zone_mean"] = df[zone_cols].mean(axis=1)
+    df["Tin_zone_var"] = df[zone_cols].var(axis=1, ddof=0)
+    df["Tin_zone_range"] = df[zone_cols].max(axis=1) - df[zone_cols].min(axis=1)
+    df = df.drop(columns=zone_cols)
 
+# FEATURE TYPES
 
-# %%
+df = df.reset_index(drop=True)
+y = df.pop("label").to_numpy()
+groups = df[PARTICIPANT_ID].astype(str).to_numpy()      # participant of every row
 
-# Fill categorical missing values with mode.
-for col in categorical_columns:
-    if df[col].isnull().any():
-        df[col] = df[col].fillna(df[col].mode()[0])
+# Identifiers, free text and raw date/time strings are not model inputs.
+not_features = ["Index", "SurvID", "SurvID.1", "unID", "Date", "Time", "SurvDate",
+                "SurvTimeStart", "SurvTimeEnd", "_time", "Comment", "SurvObs",
+                "WeathStaCode", "WeathStaType", "Variable.name"]
+df = df.drop(columns=[c for c in not_features if c in df.columns])
 
-# Use KNNImputer for numerical columns.
-knn_imputer = KNNImputer(n_neighbors=5)
-df[numerical_columns] = knn_imputer.fit_transform(df[numerical_columns])
+# Text columns, the context columns and the integer-coded questionnaire answers
+# are categorical; all other columns are numerical.
+coded_answers = ["Place", "Sex", "Age", "PeriodRes", "Native", "Adapt"]
+categorical_features = [c for c in df.columns
+                        if df[c].dtype == object or str(df[c].dtype).startswith("str")
+                        or c in contextual_features or c in coded_answers]
+numerical_features_all = [c for c in df.columns if c not in categorical_features]
+for col in categorical_features:
+    df[col] = df[col].map(lambda v: str(v).strip() if pd.notna(v) else np.nan).astype(object)
+for col in numerical_features_all:
+    df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# %%
-# Drop all rows with any missing values from the DataFrame
-df = df.dropna()
+print("\nRows:", len(df), "| participants:", len(set(groups)),
+      "| numerical features:", len(numerical_features_all),
+      "| categorical features:", len(categorical_features))
 
-# Check remaining shape of the dataset
-df.shape
+# SPLIT + STAGE 2
 
-# %%
-# Temporal feature extraction
-df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-df["SurvDate"] = pd.to_datetime(df["SurvDate"], errors="coerce")
-df["Time"] = pd.to_datetime(df["Time"], format="%H:%M:%S", errors="coerce").dt.time
-df["SurvTimeStart"] = pd.to_datetime(
-    df["SurvTimeStart"], format="%H:%M:%S", errors="coerce"
-).dt.time
-df["SurvTimeEnd"] = pd.to_datetime(
-    df["SurvTimeEnd"], format="%H:%M:%S", errors="coerce"
-).dt.time
+for run, seed in enumerate(SPLIT_SEEDS, start=1):
+    print(f"\n========== Split {run} (seed {seed}) ==========")
 
-df["date_month"] = df["Date"].dt.month
-df["date_day"] = df["Date"].dt.day
-df["date_weekday"] = df["Date"].dt.weekday
-df["surv_month"] = df["SurvDate"].dt.month
-df["surv_day"] = df["SurvDate"].dt.day
-df["surv_weekday"] = df["SurvDate"].dt.weekday
+    # ---------------- subject-wise 70 % train, 10 % validation, 20 % test
+    idx = np.arange(len(df))
+    split1 = GroupShuffleSplit(n_splits=1, test_size=0.30, random_state=seed)
+    train_idx, rest_idx = next(split1.split(idx, y, groups))
+    split2 = GroupShuffleSplit(n_splits=1, test_size=2 / 3, random_state=seed)
+    r_val, r_test = next(split2.split(rest_idx, y[rest_idx], groups[rest_idx]))
+    val_idx, test_idx = rest_idx[r_val], rest_idx[r_test]
 
+    # check: no participant appears in two subsets
+    assert not set(groups[train_idx]) & set(groups[val_idx])
+    assert not set(groups[train_idx]) & set(groups[test_idx])
+    assert not set(groups[val_idx]) & set(groups[test_idx])
 
-def time_to_minutes(t):
-    if pd.isnull(t):
-        return np.nan
-    return t.hour * 60 + t.minute + t.second / 60
+    train, val, test = df.iloc[train_idx].copy(), df.iloc[val_idx].copy(), df.iloc[test_idx].copy()
+    y_train, y_val, y_test = y[train_idx], y[val_idx], y[test_idx]
+    print("Train:", train.shape, " Validation:", val.shape, " Test:", test.shape)
 
+    # ---------------- 7. missing values
+    # categorical: most frequent value of the training set
+    for col in categorical_features:
+        if train[col].notna().any():
+            most_frequent = train[col].mode(dropna=True).iloc[0]
+        else:
+            most_frequent = "Unknown"
+        for part in (train, val, test):
+            part[col] = part[col].fillna(most_frequent)
 
-df["time_minutes"] = df["Time"].apply(time_to_minutes)
-df["surv_start_minutes"] = df["SurvTimeStart"].apply(time_to_minutes)
-df["surv_end_minutes"] = df["SurvTimeEnd"].apply(time_to_minutes)
-df["surv_duration"] = df["surv_end_minutes"] - df["surv_start_minutes"]
+    # numerical columns that are empty in the training set cannot be used
+    numerical_features = [c for c in numerical_features_all if train[c].notna().any()]
+    raw_train = train[numerical_features].copy()          # unscaled copy, for the outlier inspection
+    for part in (train, val, test):
+        part.drop(columns=[c for c in numerical_features_all if c not in numerical_features], inplace=True)
 
-df.drop(
-    columns=[
-        "Index",
-        "SurvID",
-        "unID",
-        "Date",
-        "Time",
-        "SurvDate",
-        "SurvTimeStart",
-        "SurvTimeEnd",
-    ],
-    inplace=True,
-)
+    # numerical: KNN imputer (k = 5), fitted on the training set
+    print("KNN imputation ...")
+    imputer = KNNImputer(n_neighbors=5)
+    imputer.fit(train[numerical_features].to_numpy())
+    for part in (train, val, test):
+        part[numerical_features] = imputer.transform(part[numerical_features].to_numpy())
 
-# %%
-# Convert to integer type
-df["StateTSVF"] = df["StateTSVF"].astype(int)
+    # ---------------- 8. standardization, fitted on the training set
+    scaler = StandardScaler()
+    scaler.fit(train[numerical_features].to_numpy())
+    for part in (train, val, test):
+        part[numerical_features] = scaler.transform(part[numerical_features].to_numpy())
 
-# Confirm it's now integer
-print(df["StateTSVF"].unique())  # Should show array of ints
-print(df["StateTSVF"].dtype)  # Should show 'int64'
+    # ---------------- 9. DBSCAN outlier removal (training set only)
+    if APPLY_DBSCAN:
+        dbscan = DBSCAN(eps=DBSCAN_EPS, min_samples=DBSCAN_MIN_SAMPLES, n_jobs=-1)
+        keep = dbscan.fit_predict(train[numerical_features].to_numpy()) != -1
+        print(f"DBSCAN (eps = {DBSCAN_EPS}, min_samples = {DBSCAN_MIN_SAMPLES}) outliers removed:",
+              int((~keep).sum()), f"of {len(train)} training rows ({100 * (~keep).mean():.2f} %)")
 
-df["StateTSVF"] = pd.Categorical(df["StateTSVF"])
+        # inspection: how the removed rows differ from the kept rows (raw, unscaled values)
+        if (~keep).any() and keep.any():
+            inspect = pd.DataFrame({
+                "median_removed": raw_train[~keep].median(),
+                "median_kept": raw_train[keep].median(),
+                "missing_removed_%": 100 * raw_train[~keep].isna().mean(),
+                "missing_kept_%": 100 * raw_train[keep].isna().mean(),
+            }).round(2)
+            print("Removed vs kept rows (largest median differences):")
+            gap = (inspect["median_removed"] - inspect["median_kept"]).abs()
+            print(inspect.loc[gap.sort_values(ascending=False).index[:10]])
+            print("Classes of removed rows (0..4 = -2..+2):",
+                  pd.Series(y_train[~keep]).value_counts().sort_index().to_dict())
+            inspect.to_csv(f"scales_split{run}_dbscan_inspection.csv")
 
+        train, y_train = train[keep], y_train[keep]
 
-# %%
+    # ---------------- 10. encode categorical features (training-set vocabulary)
+    # a category that appears only in validation/test gets its own "Unknown" code
+    for col in categorical_features:
+        categories = sorted(train[col].astype(str).unique())
+        codes = {value: i for i, value in enumerate(categories)}
+        for part in (train, val, test):
+            part[col] = part[col].astype(str).map(codes).fillna(len(categories)).astype(int)
 
-# Include 'StateTSVF' in categorical_columns if it should be treated as a label
-categorical_columns = (
-    categorical_columns + ["StateTSVF"]
-    if "StateTSVF" not in categorical_columns
-    else categorical_columns
-)
+    # ---------------- 11. SMOTE on the training set only
+    # only classes -2 (index 0) and +2 (index 4) are oversampled, up to the size
+    # of the smallest mid-range class (-1, 0, +1)
+    counts = pd.Series(y_train).value_counts().sort_index()
+    target_count = int(min(counts[1], counts[2], counts[3]))
+    sampling_strategy = {cls: max(target_count, int(counts[cls])) for cls in (0, 4)}
 
-# Remove non-existent columns from the list
-categorical_columns = [col for col in categorical_columns if col in df.columns]
-numerical_columns = [
-    col
-    for col in numerical_columns
-    if col in df.columns and col not in categorical_columns
-]
+    k = min(5, int(counts[0]) - 1, int(counts[4]) - 1)    # SMOTE needs k < size of the class
+    # plain SMOTE interpolates every column, so the synthetic rows get non-integer
+    # category codes; these are rounded back to the nearest valid code
+    smote = SMOTE(sampling_strategy=sampling_strategy, k_neighbors=k, random_state=seed)
+    train_bal, y_train_bal = smote.fit_resample(train, y_train)
+    for col in categorical_features:
+        n_codes = int(train[col].max())
+        train_bal[col] = np.clip(np.rint(train_bal[col]), 0, n_codes).astype(int)
+    n_synthetic = len(y_train_bal) - len(y_train)
 
-# Ensure all values in categorical columns are strings before encoding
-for col in categorical_columns:
-    df[col] = df[col].astype(str).fillna("missing")
+    print("Training classes before SMOTE:", counts.tolist())
+    print("Training classes after SMOTE: ", pd.Series(y_train_bal).value_counts().sort_index().tolist())
+    print("Synthetic training rows:", n_synthetic)
 
-# Apply Label Encoding to categorical columns (including StateTSVF)
-label_encoders = {}
-for col in categorical_columns:
-    le = LabelEncoder()
-    df[col] = le.fit_transform(df[col])
-    label_encoders[col] = le
+    # ---------------- save (context columns first, then the other features, then the label)
+    columns = contextual_features + [c for c in train_bal.columns if c not in contextual_features]
+    tag = f"scales_split{run}" + ("" if APPLY_DBSCAN else "_noDBSCAN")
 
-# Apply StandardScaler to numerical columns
-scaler = StandardScaler()
-df[numerical_columns] = scaler.fit_transform(df[numerical_columns])
+    out_train = train_bal[columns].copy()
+    out_train["label"] = y_train_bal
+    out_train["is_synthetic"] = np.r_[np.zeros(len(y_train), int), np.ones(n_synthetic, int)]
+    out_val = val[columns].copy()
+    out_val["label"] = y_val
+    out_test = test[columns].copy()
+    out_test["label"] = y_test
 
+    out_train.to_csv(f"{tag}_train.csv", index=False)
+    out_val.to_csv(f"{tag}_val.csv", index=False)
+    out_test.to_csv(f"{tag}_test.csv", index=False)
+    print(f"Saved: {tag}_train.csv, {tag}_val.csv, {tag}_test.csv")
 
-# %%
-# Save the updated DataFrame to a CSV file
-df.to_csv(output_file, index=False)
-
-# %%
+print("\nPreprocessing completed.")
