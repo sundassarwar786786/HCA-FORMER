@@ -3,146 +3,160 @@
 """
 Created on Lun Lug 07 11:05:49 2025
 
-@author: modal
+@author: Sundas Sarwar
 """
 
 # %%
 
-import argparse
-import traceback
+
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from pathlib import Path
-import matplotlib.pyplot as plt
-from sklearn.impute import KNNImputer, SimpleImputer
-from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-parser = argparse.ArgumentParser(
-    description="Preprocessing for Hierarchical Transformer with Multi-Head Self-Attention for Sensor Data"
-)
-parser.add_argument(
-    "--data_path", type=str, default="./data", help="Path to the dataset CSV file"
-)
-parser.add_argument(
-    "--output_path",
-    type=str,
-    default="./preprocessed_data",
-    help="Path to save the processed dataset",
-)
-args, _ = parser.parse_known_args()
+from sklearn.model_selection import train_test_split
+from sklearn.impute import KNNImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import DBSCAN
+from imblearn.over_sampling import SMOTENC
 
-data_path = Path(args.data_path).resolve()
-output_path = Path(args.output_path).resolve()
+DATA_PATH = "./dataset/ashrae_db2.01.csv"      # change to the file location
+SEEDS = [42, 1, 2, 3, 4]                     # one random split per seed (5 runs)
 
-print(f"Loading data from {data_path / 'ashrae_db2.01.csv'}")
+# LOAD DATASET
+
 try:
-    df = pd.read_csv(data_path / "ashrae_db2.01.csv")
+    df = pd.read_csv(DATA_PATH, low_memory=False)
 except UnicodeDecodeError:
-    df = pd.read_csv(data_path / "ashrae_db2.01.csv", encoding="ISO-8859-1")
-except Exception:
-    traceback.print_exc()
-    raise ImportError("Loading failed")
+    df = pd.read_csv(DATA_PATH, encoding="ISO-8859-1", low_memory=False)
 
-# Check the missing values
-print("Checking for missing values...")
-missing_values = df.isnull().sum()
-print(missing_values)
+print("Original shape:", df.shape)
 
-# Percentage of missing values.
-missing_percentage = (df.isnull().sum() / len(df)) * 100
-print(missing_percentage)
+# ------------------------------------------------------------
+# 1. DROP DUPLICATE ROWS
+# ------------------------------------------------------------
 
-plt.figure(figsize=(10, 6))
-sns.heatmap(df.isnull(), cmap="viridis", cbar=False, yticklabels=False)
-plt.title("Missing Values Heatmap")
-plt.show()
+n_before = len(df)
+df = df.drop_duplicates().reset_index(drop=True)
+print("Duplicate rows removed:", n_before - len(df))
 
-data1 = df[df["Cooling startegy_building level"] == "Air Conditioned"]
-data2 = df[df["Cooling startegy_building level"] == "Naturally Ventilated"]
-data3 = df[df["Cooling startegy_building level"] == "Mixed Mode"]
-data4 = df[df["Cooling startegy_building level"] == "Mechanically Ventilated"]
+# 2. THERMAL SENSATION: 7 POINTS -> 5 POINTS
 
-df = pd.concat([data1, data2, data3, data4], axis=0)
-use_column = "Thermal sensation"
+# -3, -2 -> -2 ;  -1 -> -1 ;  0 -> 0 ;  +1 -> +1 ;  +2, +3 -> +2
+# Votes such as -0.5 or 2.1 are first rounded to the nearest point.
+# Rows without a thermal sensation vote are removed.
 
-# Making the range from [-3,3] to [-2,2]
-df[use_column] = df[use_column].apply(lambda x: -2 if x <= -2 else x)
-df[use_column] = df[use_column].apply(lambda x: 2 if x >= 2 else x)
+TARGET = "Thermal sensation"
 
-# Rounding off the values to make it categorical in nature
-df[use_column] = df[use_column].apply(lambda x: np.round(x))
+df = df.dropna(subset=[TARGET]).reset_index(drop=True)
+tsv_5 = np.clip(np.round(df[TARGET]), -2, 2)
+y = (tsv_5 + 2).astype(int).to_numpy()        
+df = df.drop(columns=[TARGET])
 
-# Handling NaNs before converting to integer
-df = df.dropna(subset=[use_column])  # Remove rows where use_column is NaN
+print("\nFive-point distribution (0..4 = -2..+2):")
+print(pd.Series(y).value_counts().sort_index())
 
-# Convert use_column to integer type
-df[use_column] = df[use_column].astype(int)
+# FEATURE TYPES
 
-# Removing NaN values from 'Sex' column as well
-df = df.dropna(subset=["Sex"])
+# Five contextual features used by HCA.
+contextual_features = ["Building type", "City", "Season",
+                       "Koppen climate classification", "Country"]
 
-# Checking unique values
-print(df[use_column].unique())
+# Text columns are categorical; all other columns are numerical.
+categorical_features = [c for c in df.columns
+                        if df[c].dtype == object or str(df[c].dtype).startswith("str")
+                        or c in contextual_features]
+numerical_features = [c for c in df.columns if c not in categorical_features]
 
-duplicates_count = df.duplicated().sum()
+print("\nNumerical features:", len(numerical_features))
+print("Categorical features:", len(categorical_features))
 
-df = df.drop_duplicates()
+# 3. IMPUTE MISSING VALUES + STANDARDIZE
 
-# Define numerical as float64 and categorical as int64 or object
-numerical_columns = df.select_dtypes(include=["float64"]).columns.tolist()
-categorical_columns = df.select_dtypes(include=["int64", "object"]).columns.tolist()
+# Categorical: most frequent value.
+for col in categorical_features:
+    df[col] = df[col].map(lambda v: str(v).strip() if pd.notna(v) else np.nan).astype(object)
+    df[col] = df[col].fillna(df[col].mode(dropna=True).iloc[0])
 
-# Print results
-print("Numerical Columns (float64):", numerical_columns)
-print("Categorical Columns (int64 & object):", categorical_columns)
+# Numerical: KNN imputer (k = 5).
+print("\nKNN imputation ...")
+imputer = KNNImputer(n_neighbors=5)
+imputer.fit(df[numerical_features].to_numpy())
+values = df[numerical_features].to_numpy()
+# transformed in batches of 1,000 rows to keep memory use low
+df[numerical_features] = np.vstack(
+    [imputer.transform(values[i:i + 1000]) for i in range(0, len(values), 1000)])
 
-# Initialize SimpleImputer with strategy='most_frequent'
-imputer = SimpleImputer(strategy="most_frequent")
-
-# Apply imputer to categorical columns
-print("Applying SimpleImputer to categorical columns...", end=" ")
-df[categorical_columns] = imputer.fit_transform(df[categorical_columns])
-print("Done.")
-
-# Initialize KNN Imputer
-num_imputer = KNNImputer()
-
-# Apply KNN Imputer only on numerical columns
-print("Applying KNNImputer to numerical columns...", end=" ")
-df[numerical_columns] = num_imputer.fit_transform(df[numerical_columns])
-print("Done.")
-
-# Combine numerical and encoded categorical features
-df = pd.concat([df[numerical_columns], df[categorical_columns]], axis=1)
-
-# Initialize StandardScaler
+# Standardize numerical features (needed so that DBSCAN distances are comparable).
 scaler = StandardScaler()
+df[numerical_features] = scaler.fit_transform(df[numerical_features].to_numpy())
 
-# Apply StandardScaler only on numerical columns (Ensure they are numeric)
-print("Scaling numerical columns...", end=" ")
-df[numerical_columns] = scaler.fit_transform(df[numerical_columns])
-print("Done.")
+# 4. DBSCAN OUTLIER REMOVAL
 
-# Ensure categorical column names are valid
-categorical_columns = [col for col in categorical_columns if col in df.columns]
+print("\nDBSCAN (eps = 5, min_samples = 3) ...")
+dbscan = DBSCAN(eps=5, min_samples=3, n_jobs=-1)
+labels = dbscan.fit_predict(df[numerical_features].to_numpy())
 
-# Convert categorical columns to string and fill NaN with 'Unknown'
-df[categorical_columns] = df[categorical_columns].astype(str).fillna("Unknown")
+keep = labels != -1
+print("DBSCAN outliers removed:", int((~keep).sum()),
+      f"of {len(df)} ({100 * (~keep).mean():.2f} %)")
 
-# Initialize LabelEncoders dictionary
-label_encoders = {}
+df = df[keep].reset_index(drop=True)
+y = y[keep]
 
-# Apply Label Encoding to each categorical column
-for col in categorical_columns:
-    le = LabelEncoder()
-    df[col] = le.fit_transform(df[col])
-    label_encoders[col] = le  # Store encoder for future decoding if needed
+# ENCODE CATEGORICAL FEATURES (integer codes for SMOTE-NC and HCA embeddings)
 
-output_path.mkdir(parents=True, exist_ok=True)
-df.to_csv(output_path / "ASHRAE_processed.csv", index=False)
-print(
-    f"Data preprocessing completed successfully and saved in {output_path / 'ASHRAE_processed.csv'}!"
-)
+for col in categorical_features:
+    df[col] = df[col].astype("category").cat.codes
+
+# Context columns first, then all other features.
+columns = contextual_features + [c for c in df.columns if c not in contextual_features]
+df = df[columns]
+cat_indices = [df.columns.get_loc(c) for c in categorical_features]
+
+# 5. FIVE RANDOM SPLITS (70 / 10 / 20) 
+
+for run, seed in enumerate(SEEDS, start=1):
+    print(f"\n========== Run {run} (seed {seed}) ==========")
+
+    # 70 % train, 10 % validation, 20 % test, stratified by class
+    idx = np.arange(len(df))
+    train_idx, rest_idx = train_test_split(idx, test_size=0.30, stratify=y, random_state=seed)
+    val_idx, test_idx = train_test_split(rest_idx, test_size=2 / 3, stratify=y[rest_idx],
+                                         random_state=seed)
+
+    train, y_train = df.iloc[train_idx], y[train_idx]
+    val, y_val = df.iloc[val_idx], y[val_idx]
+    test, y_test = df.iloc[test_idx], y[test_idx]
+    print("Train:", train.shape, " Validation:", val.shape, " Test:", test.shape)
+
+    counts = pd.Series(y_train).value_counts().sort_index()
+    target_count = int(min(counts[1], counts[2], counts[3]))
+    sampling_strategy = {cls: max(target_count, int(counts[cls])) for cls in (0, 4)}
+
+    smote = SMOTENC(categorical_features=cat_indices,
+                    sampling_strategy=sampling_strategy,
+                    random_state=seed)
+    train_bal, y_train_bal = smote.fit_resample(train, y_train)
+    n_synthetic = len(y_train_bal) - len(y_train)
+
+    print("Training classes before SMOTE:", counts.tolist())
+    print("Training classes after SMOTE: ", pd.Series(y_train_bal).value_counts().sort_index().tolist())
+    print("Synthetic training rows:", n_synthetic)
+
+    # save
+    out_train = train_bal.copy()
+    out_train["label"] = y_train_bal
+    out_train["is_synthetic"] = np.r_[np.zeros(len(y_train), int), np.ones(n_synthetic, int)]
+    out_val = val.copy()
+    out_val["label"] = y_val
+    out_test = test.copy()
+    out_test["label"] = y_test
+
+    out_train.to_csv(f"ashrae_run{run}_train.csv", index=False)
+    out_val.to_csv(f"ashrae_run{run}_val.csv", index=False)
+    out_test.to_csv(f"ashrae_run{run}_test.csv", index=False)
+    print(f"Saved: ashrae_run{run}_train.csv, ashrae_run{run}_val.csv, ashrae_run{run}_test.csv")
+
+print("\nPreprocessing completed (5 runs).")
+
 
 # %%
