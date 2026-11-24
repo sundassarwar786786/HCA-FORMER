@@ -29,7 +29,7 @@ PARTICIPANT_ID = "unID"      # subject-wise split: no participant in more than o
 
 # DBSCAN setting
 APPLY_DBSCAN = True          
-DBSCAN_EPS = 5
+DBSCAN_EPS = 9.3
 DBSCAN_MIN_SAMPLES = 3
 
 ROLLING_WINDOW = 3           # observations in the rolling median / running average
