@@ -163,9 +163,9 @@ for run, seed in enumerate(SPLIT_SEEDS, start=1):
         part[numerical_features] = scaler.transform(part[numerical_features].to_numpy())
 
     if APPLY_DBSCAN:
-        dbscan = DBSCAN(eps=5, min_samples=3, n_jobs=-1)
+        dbscan = DBSCAN(eps=9.3, min_samples=3, n_jobs=-1)
         keep = dbscan.fit_predict(train[numerical_features].to_numpy()) != -1
-        print("DBSCAN (eps = 5, min_samples = 3) outliers removed:", int((~keep).sum()),
+        print("DBSCAN (eps = 9.3, min_samples = 3) outliers removed:", int((~keep).sum()),
               f"of {len(train)} training rows ({100 * (~keep).mean():.2f} %)")
 
         if (~keep).any():
