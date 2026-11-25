@@ -22,7 +22,7 @@ DATA_PATH = "./dataset/Scales_Dataset.csv"
 # "fixed"  = ONE fixed 70/10/20 partition (seed 42), as in the paper: the five runs then use the
 #            same partition with a different training seed.
 # "random" = five different random 70/10/20 partitions (seeds 42, 1, 2, 3, 4).
-SPLIT_MODE = "fixed"
+SPLIT_MODE = "random"
 SPLIT_SEEDS = [42] if SPLIT_MODE == "fixed" else [42, 1, 2, 3, 4]
 
 PARTICIPANT_ID = "unID"      # subject-wise split: no participant in more than one subset
